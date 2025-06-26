@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'APP_VERSION', defaultValue: '1.1.1', description: 'Application version (e.g., 1.1.1, 1.1.2)')
+    }
+
     environment {
         SONAR_HOST_URL = 'http://13.201.134.223:30900/'
         NEXUS_URL = 'http://13.201.134.223:30801'
@@ -27,7 +31,7 @@ pipeline {
                               -Dsonar.projectKey=sample-java-app \
                               -Dsonar.host.url=$SONAR_HOST_URL \
                               -Dsonar.login=$SONAR_TOKEN \
-                              -Dsonar.projectVersion=${BUILD_NUMBER}
+                              -Dsonar.projectVersion=${params.APP_VERSION}
                         """
                     }
                 }
@@ -46,7 +50,7 @@ pipeline {
                     sh """
                         GROUP_PATH=\$(echo $GROUP_ID | tr '.' '/')
                         curl -v -u \$USERNAME:\$PASSWORD --upload-file $FILE \\
-                        $NEXUS_URL/repository/$REPO/\$GROUP_PATH/$ARTIFACT_ID/${BUILD_NUMBER}/$ARTIFACT_ID-${BUILD_NUMBER}.$PACKAGING
+                        $NEXUS_URL/repository/$REPO/\$GROUP_PATH/$ARTIFACT_ID/${params.APP_VERSION}/$ARTIFACT_ID-${params.APP_VERSION}.$PACKAGING
                     """
                 }
             }
@@ -55,71 +59,10 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline completed successfully!'
+            echo "Pipeline completed successfully for version ${params.APP_VERSION}!"
         }
         failure {
-            echo 'Pipeline failed!'
+            echo "Pipeline failed for version ${params.APP_VERSION}!"
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
