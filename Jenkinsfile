@@ -14,12 +14,16 @@ pipeline {
         NEXUS_DOCKER_REGISTRY   = '13.235.82.221:30002'
     }
 
-    stages {
-        stage('Checkout') {
-            steps {
-                git url: 'https://github.com/akash-devops2/sample-java-sonar-nexus.git', branch: 'main'
-            }
-        }
+    stage('Build') {
+    steps {
+        // Override the version in pom.xml before packaging
+        sh "mvn versions:set -DnewVersion=${VERSION}"
+        sh 'mvn clean package'
+        sh 'ls -l target/'
+        sh "echo \"📦 Built JAR: target/sample-java-app-${VERSION}.jar\""
+    }
+}
+
 
         stage('SonarQube Analysis') {
             steps {
