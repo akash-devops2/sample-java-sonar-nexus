@@ -6,9 +6,7 @@ pipeline {
         NEXUS_URL               = 'http://13.235.82.221:30001'
         NEXUS_REPO              = 'maven-releases'
         GROUP_ID                = 'com.devops'
-        ARTIFACT_ID             = 'sample-java-app'
-        BUILD_OFFSET            = '56' // If current build is 52, this gives version 1.0
-        VERSION                 = "1.${BUILD_NUMBER.toInteger() - BUILD_OFFSET.toInteger()}"
+        VERSION                 = "1.${BUILD_NUMBER}"
         FILE_NAME               = "sample-java-app-${VERSION}.jar"
         DOCKER_IMAGE_NAME       = 'sample-java-app'
         NEXUS_DOCKER_REGISTRY   = '13.235.82.221:30002'
