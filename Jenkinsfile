@@ -7,55 +7,47 @@ pipeline {
         NEXUS_REPO              = 'maven-releases'
         GROUP_ID                = 'com.devops'
         ARTIFACT_ID             = 'sample-java-app'
-        BUILD_OFFSET            = '54' // Adjust this offset to get 1.0 now (i.e., 46th build = 1.1)
+        BUILD_OFFSET            = '55' // If current build is 52, this gives version 1.0
         VERSION                 = "1.${BUILD_NUMBER.toInteger() - BUILD_OFFSET.toInteger()}"
         FILE_NAME               = "sample-java-app-${VERSION}.jar"
         DOCKER_IMAGE_NAME       = 'sample-java-app'
         NEXUS_DOCKER_REGISTRY   = '13.235.82.221:30002'
     }
 
-    stage('Build') {
-    steps {
-        // Override the version in pom.xml before packaging
-        sh "mvn versions:set -DnewVersion=${VERSION}"
-        sh 'mvn clean package'
-        sh 'ls -l target/'
-        sh "echo \"📦 Built JAR: target/sample-java-app-${VERSION}.jar\""
-    }
-}
-
+    stages {
+        stage('Build') {
+            steps {
+                // Override the version in pom.xml before packaging
+                sh "mvn versions:set -DnewVersion=${VERSION}"
+                sh 'mvn clean package'
+                sh 'ls -l target/'
+                sh "echo \"📦 Built JAR: target/sample-java-app-${VERSION}.jar\""
+            }
+        }
 
         stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token-id', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('MySonar') {
-                        sh '''
+                        sh """
                             mvn clean verify sonar:sonar \
                             -Dsonar.projectKey=sample-java-app \
-                            -Dsonar.projectVersion=$VERSION \
-                            -Dsonar.host.url=$SONAR_HOST_URL \
-                            -Dsonar.login=$SONAR_TOKEN
-                        '''
+                            -Dsonar.projectVersion=${VERSION} \
+                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.login=${SONAR_TOKEN}
+                        """
                     }
                 }
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh 'mvn package'
-                sh 'ls -l target/'
-                sh "echo \"📦 Built JAR: target/sample-java-app-${VERSION}.jar\""
             }
         }
 
         stage('Upload to Nexus Maven Repo') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh '''
-                        curl -v -u $USERNAME:$PASSWORD --upload-file target/sample-java-app-${VERSION}.jar \
+                    sh """
+                        curl -v -u $USERNAME:$PASSWORD --upload-file target/${FILE_NAME} \
                         ${NEXUS_URL}/repository/${NEXUS_REPO}/$(echo ${GROUP_ID} | tr '.' '/')/${ARTIFACT_ID}/${VERSION}/${FILE_NAME}
-                    '''
+                    """
                 }
             }
         }
@@ -64,12 +56,12 @@ pipeline {
             steps {
                 sh 'mkdir -p downloaded-artifact'
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh '''
+                    sh """
                         cd downloaded-artifact
                         curl -u $USERNAME:$PASSWORD -O \
                         ${NEXUS_URL}/repository/${NEXUS_REPO}/$(echo ${GROUP_ID} | tr '.' '/')/${ARTIFACT_ID}/${VERSION}/${FILE_NAME}
                         ls -l
-                    '''
+                    """
                 }
             }
         }
@@ -88,7 +80,7 @@ pipeline {
                         ENTRYPOINT ["java", "-jar", "app.jar"]
                         """
 
-                        // Build and Push
+                        // Build and Push Docker Image
                         sh """
                             docker build -t ${imageTag} .
                             echo "$DOCKER_PASS" | docker login ${NEXUS_DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
