@@ -7,7 +7,7 @@ pipeline {
         NEXUS_REPO              = 'maven-releases'
         GROUP_ID                = 'com.devops'
         ARTIFACT_ID             = 'sample-java-app'
-        BUILD_OFFSET            = '53' // Adjust this offset to get 1.0 now (i.e., 46th build = 1.1)
+        BUILD_OFFSET            = '54' // Adjust this offset to get 1.0 now (i.e., 46th build = 1.1)
         VERSION                 = "1.${BUILD_NUMBER.toInteger() - BUILD_OFFSET.toInteger()}"
         FILE_NAME               = "sample-java-app-${VERSION}.jar"
         DOCKER_IMAGE_NAME       = 'sample-java-app'
