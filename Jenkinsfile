@@ -8,7 +8,7 @@ pipeline {
         GROUP_ID = 'com.devops'
         ARTIFACT_ID = 'sample-java-app'
         PACKAGING = 'jar'
-        FILE = 'target/sample-java-app-${APP_VERSION}.jar'
+        FILE = 'target/sample-java-app-1.0.jar'
     }
 
     stages {
@@ -18,12 +18,12 @@ pipeline {
             }
         }
 
-        stage('Set Version') {
+        stage('Generate Version') {
             steps {
                 script {
-                    def version = sh(script: "jx-release-version -dir ${env.WORKSPACE}", returnStdout: true).trim()
+                    def version = sh(script: "jx-release-version -dir ${WORKSPACE} -next-version=increment:patch", returnStdout: true).trim()
                     env.APP_VERSION = version
-                    echo "Auto-generated version: ${APP_VERSION}"
+                    echo "Version for this build: ${env.APP_VERSION}"
                 }
             }
         }
@@ -46,7 +46,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh "mvn package -Drevision=${APP_VERSION}"
+                sh 'mvn package'
             }
         }
 
@@ -55,7 +55,7 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     sh """
                         GROUP_PATH=\$(echo $GROUP_ID | tr '.' '/')
-                        curl -v -u \$USERNAME:\$PASSWORD --upload-file target/sample-java-app-${APP_VERSION}.jar \\
+                        curl -v -u \$USERNAME:\$PASSWORD --upload-file $FILE \\
                         $NEXUS_URL/repository/$REPO/\$GROUP_PATH/$ARTIFACT_ID/${APP_VERSION}/$ARTIFACT_ID-${APP_VERSION}.$PACKAGING
                     """
                 }
@@ -65,10 +65,10 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline completed successfully for version ${APP_VERSION}!"
+            echo "✅ Build successful with version ${APP_VERSION}"
         }
         failure {
-            echo "Pipeline failed!"
+            echo "❌ Build failed for version ${APP_VERSION}"
         }
     }
 }
