@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         SONAR_HOST_URL = 'http://13.235.82.221:30900/'
-        NEXUS_URL = 'http://13.235.82.221:30801'
+        NEXUS_URL = 'http://13.235.82.221:30001'
         REPO = 'maven-releases'
         GROUP_ID = 'com.devops'
         ARTIFACT_ID = 'sample-java-app'
