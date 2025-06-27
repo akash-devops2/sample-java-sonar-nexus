@@ -7,9 +7,9 @@ pipeline {
         REPO = 'maven-releases'
         GROUP_ID = 'com.devops'
         ARTIFACT_ID = 'sample-java-app'
-        VERSION = '1.0'
+        VERSION = '1.1.2'    // 🔁 CHANGED from 1.0 to 1.1.2
         PACKAGING = 'jar'
-        FILE = 'target/sample-java-app-1.0.jar'
+        FILE = 'target/sample-java-app-1.1.2.jar'   // 🔁 CHANGED JAR name
         DOCKER_REGISTRY = '13.235.82.221:30002'
         IMAGE_NAME = 'sample-java-app'
     }
