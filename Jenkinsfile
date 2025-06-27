@@ -7,7 +7,7 @@ pipeline {
         NEXUS_REPO              = 'maven-releases'
         GROUP_ID                = 'com.devops'
         ARTIFACT_ID             = 'sample-java-app'
-        BUILD_OFFSET            = '45' // Adjust this offset to get 1.0 now (i.e., 46th build = 1.1)
+        BUILD_OFFSET            = '45' // 46th build = version 1.1
         VERSION                 = "1.${BUILD_NUMBER.toInteger() - BUILD_OFFSET.toInteger()}"
         FILE_NAME               = "sample-java-app-${VERSION}.jar"
         DOCKER_IMAGE_NAME       = 'sample-java-app'
@@ -25,13 +25,13 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token-id', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('MySonar') {
-                        sh '''
-                            mvn clean verify sonar:sonar \
-                            -Dsonar.projectKey=sample-java-app \
-                            -Dsonar.projectVersion=$VERSION \
-                            -Dsonar.host.url=$SONAR_HOST_URL \
+                        sh """
+                            mvn clean verify sonar:sonar \\
+                            -Dsonar.projectKey=sample-java-app \\
+                            -Dsonar.projectVersion=$VERSION \\
+                            -Dsonar.host.url=$SONAR_HOST_URL \\
                             -Dsonar.login=$SONAR_TOKEN
-                        '''
+                        """
                     }
                 }
             }
@@ -41,41 +41,49 @@ pipeline {
             steps {
                 sh 'mvn package'
                 sh 'ls -l target/'
-                echo "📦 Built JAR: ${FILE_NAME}"
+                sh "echo 📦 Built JAR: ${FILE_NAME}"
             }
         }
 
         stage('Upload to Nexus Maven Repo') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh '''
-                        curl -v -u $USERNAME:$PASSWORD --upload-file target/${FILE_NAME} \
+                    sh """
+                        curl -v -u $USERNAME:$PASSWORD --upload-file target/sample-java-app-${VERSION}.jar \\
                         $NEXUS_URL/repository/$NEXUS_REPO/$(echo $GROUP_ID | tr '.' '/')/$ARTIFACT_ID/$VERSION/$FILE_NAME
-                    '''
+                    """
                 }
             }
         }
 
         stage('Build & Push Docker Image to Nexus Docker Registry') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'nexus-docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     script {
                         def imageTag = "${NEXUS_DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${VERSION}"
 
-                        // Write Dockerfile dynamically
+                        // Download JAR from Nexus
+                        sh """
+                            curl -u $USERNAME:$PASSWORD -O \\
+                            $NEXUS_URL/repository/$NEXUS_REPO/$(echo $GROUP_ID | tr '.' '/')/$ARTIFACT_ID/$VERSION/$FILE_NAME
+                        """
+
+                        // Write Dockerfile
                         writeFile file: 'Dockerfile', text: """
                         FROM openjdk:17
                         WORKDIR /app
-                        COPY target/${FILE_NAME} app.jar
+                        COPY ${FILE_NAME} app.jar
                         ENTRYPOINT ["java", "-jar", "app.jar"]
                         """
 
-                        // Build and push the Docker image
-                        sh """
-                            docker build -t ${imageTag} .
-                            echo "$DOCKER_PASS" | docker login ${NEXUS_DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
-                            docker push ${imageTag}
-                        """
+                        // Build and Push Docker Image
+                        withCredentials([usernamePassword(credentialsId: 'nexus-docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                            sh """
+                                docker build -t ${imageTag} .
+                                echo "$DOCKER_PASS" | docker login ${NEXUS_DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
+                                docker push ${imageTag}
+                            """
+                        }
                     }
                 }
             }
