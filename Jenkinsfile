@@ -2,43 +2,35 @@ pipeline {
     agent any
 
     environment {
-        SONAR_HOST_URL = 'http://13.235.82.221:30900'
-        SONAR_PROJECT_KEY = 'sample-java-app'
-        ARTIFACT_ID = 'sample-java-app'
-        GROUP_ID = 'com.devops'
-        PACKAGING = 'jar'
+        SONAR_HOST_URL = 'http://13.203.213.172:30900/'
+        NEXUS_URL = 'http://13.203.213.172:30801'
         REPO = 'maven-releases'
-        NEXUS_URL = 'http://your-nexus-url:8081'
+        GROUP_ID = 'com.devops'
+        ARTIFACT_ID = 'sample-java-app'
+        VERSION = '1.0'
+        PACKAGING = 'jar'
+        FILE = 'target/sample-java-app-1.0.jar'
+        DOCKER_REGISTRY = '13.235.82.221:30002'
+        IMAGE_NAME = 'sample-java-app'
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 git url: 'https://github.com/akash-devops2/sample-java-sonar-nexus.git', branch: 'main'
             }
         }
 
-        stage('Generate Version') {
-            steps {
-                script {
-                    APP_VERSION = sh(script: "jx-release-version -next-version=increment:patch", returnStdout: true).trim()
-                    echo "Version for this build: ${APP_VERSION}"
-                }
-            }
-        }
-
         stage('SonarQube Analysis') {
             steps {
-                withCredentials([string(credentialsId: 'SONAR_TOKEN', variable: 'SONAR_TOKEN')]) {
+                withCredentials([string(credentialsId: 'sonar-token-id', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('MySonar') {
-                        sh """
+                        sh '''
                             mvn clean verify sonar:sonar \
-                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                            -Dsonar.host.url=${SONAR_HOST_URL} \
-                            -Dsonar.login=${SONAR_TOKEN} \
-                            -Dsonar.projectVersion=${APP_VERSION}
-                        """
+                              -Dsonar.projectKey=sample-java-app \
+                              -Dsonar.host.url=$SONAR_HOST_URL \
+                              -Dsonar.login=$SONAR_TOKEN
+                        '''
                     }
                 }
             }
@@ -46,27 +38,17 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh "mvn versions:set -DnewVersion=${APP_VERSION}"
-                sh "mvn clean package"
+                sh 'mvn package'
             }
         }
 
         stage('Upload to Nexus') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    script {
-                        def groupPath = GROUP_ID.replace('.', '/')
-                        def fileName = "${ARTIFACT_ID}-${APP_VERSION}.${PACKAGING}"
-                        def filePath = "target/${fileName}"
-                        
-                        sh """
-                            echo "Uploading file: ${filePath}"
-                            test -f ${filePath} || (echo "❌ JAR file not found: ${filePath}" && exit 1)
-
-                            curl -v -u ${USERNAME}:${PASSWORD} --upload-file ${filePath} \\
-                            ${NEXUS_URL}/repository/${REPO}/${groupPath}/${ARTIFACT_ID}/${APP_VERSION}/${fileName}
-                        """
-                    }
+                    sh '''
+                        curl -v -u $USERNAME:$PASSWORD --upload-file $FILE \
+                        $NEXUS_URL/repository/$REPO/$(echo $GROUP_ID | tr '.' '/')/$ARTIFACT_ID/$VERSION/$ARTIFACT_ID-$VERSION.$PACKAGING
+                    '''
                 }
             }
         }
@@ -74,10 +56,11 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
-                    def imageTag = "${APP_VERSION}"
+                    def imageTag = "${DOCKER_REGISTRY}/${IMAGE_NAME}:${VERSION}"
                     sh """
-                        docker build -t your-dockerhub-username/${ARTIFACT_ID}:${imageTag} .
-                        docker push your-dockerhub-username/${ARTIFACT_ID}:${imageTag}
+                        docker build -t ${imageTag} .
+                        docker login ${DOCKER_REGISTRY} -u admin -p admin123
+                        docker push ${imageTag}
                     """
                 }
             }
@@ -86,10 +69,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Build successful for version ${APP_VERSION}"
+            echo '✅ Pipeline completed successfully!'
         }
         failure {
-            echo "❌ Build failed for version ${APP_VERSION}"
+            echo '❌ Pipeline failed!'
         }
     }
 }
