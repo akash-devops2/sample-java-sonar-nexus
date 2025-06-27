@@ -7,7 +7,7 @@ pipeline {
         NEXUS_REPO              = 'maven-releases'
         GROUP_ID                = 'com.devops'
         ARTIFACT_ID             = 'sample-java-app'
-        BUILD_OFFSET            = '45' // Adjust this offset to get 1.0 now (i.e., 43rd build = 1.0)
+        BUILD_OFFSET            = '45' // Adjust this offset to get 1.0 now (i.e., 46th build = 1.1)
         VERSION                 = "1.${BUILD_NUMBER.toInteger() - BUILD_OFFSET.toInteger()}"
         FILE_NAME               = "sample-java-app-${VERSION}.jar"
         DOCKER_IMAGE_NAME       = 'sample-java-app'
@@ -41,6 +41,7 @@ pipeline {
             steps {
                 sh 'mvn package'
                 sh 'ls -l target/'
+                echo "📦 Built JAR: ${FILE_NAME}"
             }
         }
 
@@ -48,7 +49,7 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     sh '''
-                        curl -v -u $USERNAME:$PASSWORD --upload-file target/sample-java-app-${VERSION}.jar \
+                        curl -v -u $USERNAME:$PASSWORD --upload-file target/${FILE_NAME} \
                         $NEXUS_URL/repository/$NEXUS_REPO/$(echo $GROUP_ID | tr '.' '/')/$ARTIFACT_ID/$VERSION/$FILE_NAME
                     '''
                 }
@@ -61,15 +62,15 @@ pipeline {
                     script {
                         def imageTag = "${NEXUS_DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${VERSION}"
 
-                        // Write Dockerfile
+                        // Write Dockerfile dynamically
                         writeFile file: 'Dockerfile', text: """
                         FROM openjdk:17
                         WORKDIR /app
-                        COPY target/sample-java-app.jar app.jar
+                        COPY target/${FILE_NAME} app.jar
                         ENTRYPOINT ["java", "-jar", "app.jar"]
                         """
 
-                        // Build and Push
+                        // Build and push the Docker image
                         sh """
                             docker build -t ${imageTag} .
                             echo "$DOCKER_PASS" | docker login ${NEXUS_DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
