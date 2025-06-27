@@ -2,16 +2,16 @@ pipeline {
     agent any
 
     environment {
-        SONAR_HOST_URL = 'http://13.235.82.221:30900/'
-        NEXUS_URL = 'http://13.235.82.221:30001'
-        REPO = 'maven-releases'
-        GROUP_ID = 'com.devops'
-        ARTIFACT_ID = 'sample-java-app'
-        VERSION = '1.1.2'
-        PACKAGING = 'jar'
-        FILE = "target/sample-java-app-${VERSION}.jar"
-        IMAGE_NAME = 'sample-java-app'
-        IMAGE_TAR = "${IMAGE_NAME}-${VERSION}.tar"
+        SONAR_HOST_URL     = 'http://13.235.82.221:30900/'
+        NEXUS_URL          = 'http://13.235.82.221:30001'
+        REPO               = 'maven-releases'
+        GROUP_ID           = 'com.devops'
+        ARTIFACT_ID        = 'sample-java-app'
+        VERSION            = '1.1.2'
+        PACKAGING          = 'jar'
+        FILE               = "target/sample-java-app-1.1.2.jar"
+        DOCKER_IMAGE_NAME  = 'sample-java-app'
+        DOCKER_REGISTRY    = '13.235.82.221:30002'  // Nexus Docker hosted port
     }
 
     stages {
@@ -27,9 +27,9 @@ pipeline {
                     withSonarQubeEnv('MySonar') {
                         sh '''
                             mvn clean verify sonar:sonar \
-                              -Dsonar.projectKey=sample-java-app \
-                              -Dsonar.host.url=$SONAR_HOST_URL \
-                              -Dsonar.login=$SONAR_TOKEN
+                            -Dsonar.projectKey=sample-java-app \
+                            -Dsonar.host.url=$SONAR_HOST_URL \
+                            -Dsonar.login=$SONAR_TOKEN
                         '''
                     }
                 }
@@ -42,7 +42,7 @@ pipeline {
             }
         }
 
-        stage('Upload JAR to Nexus') {
+        stage('Upload to Nexus Maven Repo') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     sh '''
@@ -53,28 +53,29 @@ pipeline {
             }
         }
 
-        stage('Docker Build & Upload Image Tar to Nexus') {
+        stage('Build & Push Docker Image to Nexus Docker Registry') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                withCredentials([usernamePassword(credentialsId: 'nexus-docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     script {
-                        // Create Dockerfile dynamically
+                        def imageTag = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${VERSION}"
+
+                        // Create Dockerfile
                         writeFile file: 'Dockerfile', text: """
-                            FROM openjdk:17
-                            WORKDIR /app
-                            COPY ${FILE} app.jar
-                            ENTRYPOINT ["java", "-jar", "app.jar"]
+                        FROM openjdk:17
+                        WORKDIR /app
+                        COPY ${FILE} app.jar
+                        ENTRYPOINT ["java", "-jar", "app.jar"]
                         """
 
-                        // Build image and save as tar
+                        // Build Docker image
                         sh """
-                            docker build -t ${IMAGE_NAME}:${VERSION} .
-                            docker save ${IMAGE_NAME}:${VERSION} -o ${IMAGE_TAR}
+                            docker build -t ${imageTag} .
                         """
 
-                        // Upload tar to Nexus raw repo
+                        // Login to Nexus Docker Registry & Push image
                         sh """
-                            curl -v -u $USERNAME:$PASSWORD --upload-file ${IMAGE_TAR} \
-                            ${NEXUS_URL}/repository/docker-image-raw/${IMAGE_TAR}
+                            echo "$DOCKER_PASS" | docker login ${DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
+                            docker push ${imageTag}
                         """
                     }
                 }
