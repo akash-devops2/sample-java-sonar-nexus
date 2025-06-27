@@ -7,7 +7,7 @@ pipeline {
         NEXUS_REPO              = 'maven-releases'
         GROUP_ID                = 'com.devops'
         ARTIFACT_ID             = 'sample-java-app'
-        BUILD_OFFSET            = '44' // Adjust this offset to get 1.0 now (i.e., 43rd build = 1.0)
+        BUILD_OFFSET            = '45' // Adjust this offset to get 1.0 now (i.e., 43rd build = 1.0)
         VERSION                 = "1.${BUILD_NUMBER.toInteger() - BUILD_OFFSET.toInteger()}"
         FILE_NAME               = "sample-java-app-${VERSION}.jar"
         DOCKER_IMAGE_NAME       = 'sample-java-app'
@@ -48,7 +48,7 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     sh '''
-                        curl -v -u $USERNAME:$PASSWORD --upload-file target/sample-java-app.jar \
+                        curl -v -u $USERNAME:$PASSWORD --upload-file target/sample-java-app-${VERSION}.jar \
                         $NEXUS_URL/repository/$NEXUS_REPO/$(echo $GROUP_ID | tr '.' '/')/$ARTIFACT_ID/$VERSION/$FILE_NAME
                     '''
                 }
