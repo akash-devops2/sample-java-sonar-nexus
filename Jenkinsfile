@@ -7,11 +7,9 @@ pipeline {
         REPO               = 'maven-releases'
         GROUP_ID           = 'com.devops'
         ARTIFACT_ID        = 'sample-java-app'
-        VERSION            = '1.1.2'
         PACKAGING          = 'jar'
-        FILE               = "target/sample-java-app-1.1.2.jar"
         DOCKER_IMAGE_NAME  = 'sample-java-app'
-        DOCKER_REGISTRY    = '13.235.82.221:30002'  // Nexus Docker hosted port
+        DOCKER_REGISTRY    = '13.235.82.221:30002' // Nexus Docker port
     }
 
     stages {
@@ -21,15 +19,42 @@ pipeline {
             }
         }
 
+        stage('Auto-Increment Version') {
+            steps {
+                script {
+                    def currentVersion = readFile('version.txt').trim()
+                    def parts = currentVersion.tokenize('.')
+                    def major = parts[0].toInteger()
+                    def minor = parts[1].toInteger() + 1
+                    def newVersion = "${major}.${minor}"
+                    echo "🔁 New Build Version: ${newVersion}"
+
+                    // Save & push version
+                    writeFile file: 'version.txt', text: newVersion
+                    sh '''
+                        git config user.email "jenkins@example.com"
+                        git config user.name "Jenkins"
+                        git add version.txt
+                        git commit -m "🔁 Bumped version to ${newVersion}" || true
+                        git push origin main || true
+                    '''
+
+                    env.VERSION = newVersion
+                    env.FILE = "target/${ARTIFACT_ID}-${newVersion}.jar"
+                }
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token-id', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('MySonar') {
                         sh '''
                             mvn clean verify sonar:sonar \
-                            -Dsonar.projectKey=sample-java-app \
-                            -Dsonar.host.url=$SONAR_HOST_URL \
-                            -Dsonar.login=$SONAR_TOKEN
+                              -Dsonar.projectKey=sample-java-app \
+                              -Dsonar.projectVersion=$VERSION \
+                              -Dsonar.host.url=$SONAR_HOST_URL \
+                              -Dsonar.login=$SONAR_TOKEN
                         '''
                     }
                 }
@@ -59,7 +84,7 @@ pipeline {
                     script {
                         def imageTag = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${VERSION}"
 
-                        // Create Dockerfile
+                        // Generate Dockerfile
                         writeFile file: 'Dockerfile', text: """
                         FROM openjdk:17
                         WORKDIR /app
@@ -67,12 +92,9 @@ pipeline {
                         ENTRYPOINT ["java", "-jar", "app.jar"]
                         """
 
-                        // Build Docker image
-                        sh """
-                            docker build -t ${imageTag} .
-                        """
+                        sh "docker build -t ${imageTag} ."
 
-                        // Login to Nexus Docker Registry & Push image
+                        // Push to Nexus Docker Registry
                         sh """
                             echo "$DOCKER_PASS" | docker login ${DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
                             docker push ${imageTag}
