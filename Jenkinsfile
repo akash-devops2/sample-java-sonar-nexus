@@ -8,8 +8,6 @@ pipeline {
         GROUP_ID = 'com.devops'
         ARTIFACT_ID = 'sample-java-app'
         PACKAGING = 'jar'
-        FILE = 'target/sample-java-app-1.0.jar'
-        DOCKER_REGISTRY = '13.235.82.221:30002'
     }
 
     stages {
@@ -54,42 +52,27 @@ pipeline {
         stage('Upload to Nexus') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh """
-                        GROUP_PATH=\$(echo $GROUP_ID | tr '.' '/')
-                        curl -v -u \$USERNAME:\$PASSWORD --upload-file $FILE \\
-                        $NEXUS_URL/repository/$REPO/\$GROUP_PATH/$ARTIFACT_ID/${APP_VERSION}/$ARTIFACT_ID-${APP_VERSION}.$PACKAGING
-                    """
+                    script {
+                        def groupPath = GROUP_ID.replace('.', '/')
+                        def fileName = "${ARTIFACT_ID}-${APP_VERSION}.${PACKAGING}"
+                        def filePath = "target/${fileName}"
+                        
+                        sh """
+                            echo "Uploading file: ${filePath}"
+                            test -f ${filePath} || (echo "❌ JAR file not found: ${filePath}" && exit 1)
+
+                            curl -v -u ${USERNAME}:${PASSWORD} --upload-file ${filePath} \\
+                            ${NEXUS_URL}/repository/${REPO}/${groupPath}/${ARTIFACT_ID}/${APP_VERSION}/${fileName}
+                        """
+                    }
                 }
             }
         }
 
         stage('Docker Build & Push') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    script {
-                        def GROUP_PATH = GROUP_ID.replace('.', '/')
-                        def ARTIFACT_NAME = "${ARTIFACT_ID}-${APP_VERSION}.${PACKAGING}"
-                        def JAR_URL = "${NEXUS_URL}/repository/${REPO}/${GROUP_PATH}/${ARTIFACT_ID}/${APP_VERSION}/${ARTIFACT_NAME}"
-
-                        sh """
-                            # Download JAR from Nexus
-                            curl -u \$USERNAME:\$PASSWORD -O ${JAR_URL}
-                            
-                            # Rename for Docker context
-                            cp ${ARTIFACT_NAME} app.jar
-
-                            # Build Docker image
-                            docker build -t ${ARTIFACT_ID}:${APP_VERSION} .
-
-                            # Tag Docker image for Nexus Docker Registry
-                            docker tag ${ARTIFACT_ID}:${APP_VERSION} ${DOCKER_REGISTRY}/${ARTIFACT_ID}:${APP_VERSION}
-
-                            # Push to Nexus Docker Registry
-                            echo \$PASSWORD | docker login ${DOCKER_REGISTRY} -u \$USERNAME --password-stdin
-                            docker push ${DOCKER_REGISTRY}/${ARTIFACT_ID}:${APP_VERSION}
-                        """
-                    }
-                }
+                echo "🔧 Docker Build & Push stage here (to be implemented)..."
+                // Add your Docker steps here later
             }
         }
     }
