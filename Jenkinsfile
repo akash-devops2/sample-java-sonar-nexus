@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    parameters {
-        string(name: 'APP_VERSION', defaultValue: '1.1.1', description: 'Application version (e.g., 1.1.1, 1.1.2)')
-    }
-
     environment {
         SONAR_HOST_URL = 'http://13.235.82.221:30900/'
         NEXUS_URL = 'http://13.235.82.221:30801'
@@ -12,13 +8,26 @@ pipeline {
         GROUP_ID = 'com.devops'
         ARTIFACT_ID = 'sample-java-app'
         PACKAGING = 'jar'
-        FILE = 'target/sample-java-app-1.0.jar'
+        FILE = 'target/sample-java-app-${APP_VERSION}.jar'
     }
 
     stages {
         stage('Checkout') {
             steps {
                 git url: 'https://github.com/akash-devops2/sample-java-sonar-nexus.git', branch: 'main'
+            }
+        }
+
+        stage('Generate Version') {
+            steps {
+                script {
+                    def version = sh(script: 'jx-release-version', returnStdout: true).trim()
+                    env.APP_VERSION = version
+                    echo "Generated Version: ${env.APP_VERSION}"
+
+                    // Optional: update pom.xml with new version
+                    sh "mvn versions:set -DnewVersion=${env.APP_VERSION}"
+                }
             }
         }
 
@@ -31,7 +40,7 @@ pipeline {
                               -Dsonar.projectKey=sample-java-app \
                               -Dsonar.host.url=$SONAR_HOST_URL \
                               -Dsonar.login=$SONAR_TOKEN \
-                              -Dsonar.projectVersion=${params.APP_VERSION}
+                              -Dsonar.projectVersion=${APP_VERSION}
                         """
                     }
                 }
@@ -49,8 +58,8 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     sh """
                         GROUP_PATH=\$(echo $GROUP_ID | tr '.' '/')
-                        curl -v -u \$USERNAME:\$PASSWORD --upload-file $FILE \\
-                        $NEXUS_URL/repository/$REPO/\$GROUP_PATH/$ARTIFACT_ID/${params.APP_VERSION}/$ARTIFACT_ID-${params.APP_VERSION}.$PACKAGING
+                        curl -v -u \$USERNAME:\$PASSWORD --upload-file target/sample-java-app-${APP_VERSION}.jar \\
+                        $NEXUS_URL/repository/$REPO/\$GROUP_PATH/$ARTIFACT_ID/${APP_VERSION}/$ARTIFACT_ID-${APP_VERSION}.$PACKAGING
                     """
                 }
             }
@@ -59,10 +68,10 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline completed successfully for version ${params.APP_VERSION}!"
+            echo "✅ Pipeline completed successfully for version ${APP_VERSION}!"
         }
         failure {
-            echo "Pipeline failed for version ${params.APP_VERSION}!"
+            echo "❌ Pipeline failed for version ${APP_VERSION}!"
         }
     }
 }
