@@ -41,7 +41,7 @@ pipeline {
             steps {
                 sh 'mvn package'
                 sh 'ls -l target/'
-                sh 'echo "📦 Built JAR: target/sample-java-app-${VERSION}.jar"'
+                sh "echo \"📦 Built JAR: target/sample-java-app-${VERSION}.jar\""
             }
         }
 
