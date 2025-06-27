@@ -18,15 +18,12 @@ pipeline {
             }
         }
 
-        stage('Generate Version') {
+        stage('Set Version') {
             steps {
                 script {
-                    def version = sh(script: 'jx-release-version', returnStdout: true).trim()
+                    def version = sh(script: "jx-release-version -dir ${env.WORKSPACE}", returnStdout: true).trim()
                     env.APP_VERSION = version
-                    echo "Generated Version: ${env.APP_VERSION}"
-
-                    // Optional: update pom.xml with new version
-                    sh "mvn versions:set -DnewVersion=${env.APP_VERSION}"
+                    echo "Auto-generated version: ${APP_VERSION}"
                 }
             }
         }
@@ -49,7 +46,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                sh 'mvn package'
+                sh "mvn package -Drevision=${APP_VERSION}"
             }
         }
 
@@ -68,10 +65,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline completed successfully for version ${APP_VERSION}!"
+            echo "Pipeline completed successfully for version ${APP_VERSION}!"
         }
         failure {
-            echo "❌ Pipeline failed for version ${APP_VERSION}!"
+            echo "Pipeline failed!"
         }
     }
 }
