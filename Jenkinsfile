@@ -2,46 +2,22 @@ pipeline {
     agent any
 
     environment {
-        SONAR_HOST_URL     = 'http://13.235.82.221:30900/'
-        NEXUS_URL          = 'http://13.235.82.221:30001'
-        REPO               = 'maven-releases'
-        GROUP_ID           = 'com.devops'
-        ARTIFACT_ID        = 'sample-java-app'
-        PACKAGING          = 'jar'
-        DOCKER_IMAGE_NAME  = 'sample-java-app'
-        DOCKER_REGISTRY    = '13.235.82.221:30002' // Nexus Docker port
+        SONAR_HOST_URL         = 'http://13.235.82.221:30900'
+        NEXUS_URL              = 'http://13.235.82.221:30001'
+        NEXUS_REPO             = 'maven-releases'
+        GROUP_ID               = 'com.devops'
+        ARTIFACT_ID            = 'sample-java-app'
+        VERSION                = "1.${BUILD_NUMBER}"   // Dynamic version from Jenkins
+        PACKAGING              = 'jar'
+        FILE_NAME              = "sample-java-app-1.${BUILD_NUMBER}.jar"
+        DOCKER_IMAGE_NAME      = 'sample-java-app'
+        NEXUS_DOCKER_REGISTRY  = '13.235.82.221:30002'
     }
 
     stages {
         stage('Checkout') {
             steps {
                 git url: 'https://github.com/akash-devops2/sample-java-sonar-nexus.git', branch: 'main'
-            }
-        }
-
-        stage('Auto-Increment Version') {
-            steps {
-                script {
-                    def currentVersion = readFile('version.txt').trim()
-                    def parts = currentVersion.tokenize('.')
-                    def major = parts[0].toInteger()
-                    def minor = parts[1].toInteger() + 1
-                    def newVersion = "${major}.${minor}"
-                    echo "🔁 New Build Version: ${newVersion}"
-
-                    // Save & push version
-                    writeFile file: 'version.txt', text: newVersion
-                    sh '''
-                        git config user.email "jenkins@example.com"
-                        git config user.name "Jenkins"
-                        git add version.txt
-                        git commit -m "🔁 Bumped version to ${newVersion}" || true
-                        git push origin main || true
-                    '''
-
-                    env.VERSION = newVersion
-                    env.FILE = "target/${ARTIFACT_ID}-${newVersion}.jar"
-                }
             }
         }
 
@@ -71,8 +47,9 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
                     sh '''
-                        curl -v -u $USERNAME:$PASSWORD --upload-file $FILE \
-                        $NEXUS_URL/repository/$REPO/$(echo $GROUP_ID | tr '.' '/')/$ARTIFACT_ID/$VERSION/$ARTIFACT_ID-$VERSION.$PACKAGING
+                        cp target/sample-java-app.jar target/$FILE_NAME
+                        curl -v -u $USERNAME:$PASSWORD --upload-file target/$FILE_NAME \
+                        $NEXUS_URL/repository/$NEXUS_REPO/$(echo $GROUP_ID | tr '.' '/')/$ARTIFACT_ID/$VERSION/$FILE_NAME
                     '''
                 }
             }
@@ -82,21 +59,18 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-docker-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     script {
-                        def imageTag = "${DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${VERSION}"
+                        def imageTag = "${NEXUS_DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${VERSION}"
 
-                        // Generate Dockerfile
                         writeFile file: 'Dockerfile', text: """
                         FROM openjdk:17
                         WORKDIR /app
-                        COPY ${FILE} app.jar
+                        COPY target/${FILE_NAME} app.jar
                         ENTRYPOINT ["java", "-jar", "app.jar"]
                         """
 
-                        sh "docker build -t ${imageTag} ."
-
-                        // Push to Nexus Docker Registry
                         sh """
-                            echo "$DOCKER_PASS" | docker login ${DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
+                            docker build -t ${imageTag} .
+                            echo "$DOCKER_PASS" | docker login ${NEXUS_DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
                             docker push ${imageTag}
                         """
                     }
