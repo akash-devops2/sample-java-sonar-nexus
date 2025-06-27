@@ -17,7 +17,6 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                // Override the version in pom.xml before packaging
                 sh "mvn versions:set -DnewVersion=${VERSION}"
                 sh 'mvn clean package'
                 sh 'ls -l target/'
@@ -44,10 +43,14 @@ pipeline {
         stage('Upload to Nexus Maven Repo') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh """
-                        curl -v -u $USERNAME:$PASSWORD --upload-file target/${FILE_NAME} \
-                        ${NEXUS_URL}/repository/${NEXUS_REPO}/$(echo ${GROUP_ID} | tr '.' '/')/${ARTIFACT_ID}/${VERSION}/${FILE_NAME}
-                    """
+                    script {
+                        def groupPath = GROUP_ID.replace('.', '/')
+                        def uploadUrl = "${NEXUS_URL}/repository/${NEXUS_REPO}/${groupPath}/${ARTIFACT_ID}/${VERSION}/${FILE_NAME}"
+
+                        sh """
+                            curl -v -u $USERNAME:$PASSWORD --upload-file target/${FILE_NAME} ${uploadUrl}
+                        """
+                    }
                 }
             }
         }
@@ -56,12 +59,16 @@ pipeline {
             steps {
                 sh 'mkdir -p downloaded-artifact'
                 withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                    sh """
-                        cd downloaded-artifact
-                        curl -u $USERNAME:$PASSWORD -O \
-                        ${NEXUS_URL}/repository/${NEXUS_REPO}/$(echo ${GROUP_ID} | tr '.' '/')/${ARTIFACT_ID}/${VERSION}/${FILE_NAME}
-                        ls -l
-                    """
+                    script {
+                        def groupPath = GROUP_ID.replace('.', '/')
+                        def downloadUrl = "${NEXUS_URL}/repository/${NEXUS_REPO}/${groupPath}/${ARTIFACT_ID}/${VERSION}/${FILE_NAME}"
+
+                        sh """
+                            cd downloaded-artifact
+                            curl -u $USERNAME:$PASSWORD -O ${downloadUrl}
+                            ls -l
+                        """
+                    }
                 }
             }
         }
@@ -72,7 +79,6 @@ pipeline {
                     script {
                         def imageTag = "${NEXUS_DOCKER_REGISTRY}/${DOCKER_IMAGE_NAME}:${VERSION}"
 
-                        // Write Dockerfile
                         writeFile file: 'Dockerfile', text: """
                         FROM openjdk:17
                         WORKDIR /app
@@ -80,7 +86,6 @@ pipeline {
                         ENTRYPOINT ["java", "-jar", "app.jar"]
                         """
 
-                        // Build and Push Docker Image
                         sh """
                             docker build -t ${imageTag} .
                             echo "$DOCKER_PASS" | docker login ${NEXUS_DOCKER_REGISTRY} -u "$DOCKER_USER" --password-stdin
