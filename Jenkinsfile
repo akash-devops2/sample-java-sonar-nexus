@@ -20,28 +20,28 @@ pipeline {
             }
         }
 
-        stage('Build') {
-            steps {
-                sh "mvn versions:set -DnewVersion=${VERSION}"
-                sh 'mvn clean package'
-                sh 'ls -l target/'
-                sh "echo \"📦 Built JAR: target/sample-java-app-${VERSION}.jar\""
-            }
-        }
-
         stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token-id', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('MySonar') {
                         sh """
                             mvn clean verify sonar:sonar \
-                            -Dsonar.projectKey=sample-java-app \
+                            -Dsonar.projectKey=${ARTIFACT_ID} \
                             -Dsonar.projectVersion=${VERSION} \
                             -Dsonar.host.url=${SONAR_HOST_URL} \
                             -Dsonar.login=${SONAR_TOKEN}
                         """
                     }
                 }
+            }
+        }
+
+        stage('Build (Skip Tests)') {
+            steps {
+                sh "mvn versions:set -DnewVersion=${VERSION}"
+                sh 'mvn clean package -DskipTests'
+                sh 'ls -l target/'
+                sh "echo \"📦 Built JAR: target/${FILE_NAME}\""
             }
         }
 
